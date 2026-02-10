@@ -1140,18 +1140,59 @@ if gdf.empty:
 
 st.success(f"Loaded boundary | Features: {len(gdf)} | CRS: {pretty_crs(gdf.crs)}")
 
-
 # -----------------------------
 # STEP 2: RAINFALL DATA
 # -----------------------------
 st.subheader("2) Rainfall dataset")
 
-try:
-    ds = load_ds(NC_PATH)
-except Exception as e:
-    st.error(f"Could not open NetCDF at {NC_PATH}: {e}")
+use_demo_rainfall = st.checkbox(
+    "Use demo IMD rainfall dataset (data-v1, ~350 MB download)",
+    value=False
+)
+
+uploaded_nc = st.file_uploader(
+    "Or upload your own IMD NetCDF (.nc)",
+    type=["nc"]
+)
+
+nc_path = None
+
+# --- Case 1: User uploaded NetCDF ---
+if uploaded_nc is not None:
+    with tempfile.NamedTemporaryFile(suffix=".nc", delete=False) as tmp:
+        tmp.write(uploaded_nc.read())
+        nc_path = Path(tmp.name)
+    st.success("Using uploaded NetCDF file.")
+
+# --- Case 2: Demo NetCDF from GitHub Release ---
+elif use_demo_rainfall:
+    try:
+        ensure_nc_available()
+        nc_path = NC_PATH
+        st.success("Demo IMD rainfall dataset loaded (data-v1).")
+    except Exception as e:
+        st.error(f"Failed to download demo dataset: {e}")
+        st.stop()
+
+# --- Case 3: Nothing selected ---
+else:
+    st.info("Please upload a NetCDF file or select the demo dataset to proceed.")
     st.stop()
 
+
+# -----------------------------
+# OPEN NETCDF (SAFE FOR CLOUD)
+# -----------------------------
+try:
+    ds = load_ds(nc_path)
+except Exception as e:
+    st.error(f"Could not open NetCDF at {nc_path}: {e}")
+    st.stop()
+
+
+# -----------------------------
+# DATASET METADATA
+# -----------------------------
 time_name, lat_name, lon_name, var_name = detect_dims_and_var(ds)
 
 tmin = str(pd.to_datetime(ds[time_name].values[0]).date())
@@ -1163,7 +1204,8 @@ with colA:
     st.write("Time range:", f"**{tmin} → {tmax}**")
 with colB:
     st.write("Grid:", f"**{ds[lat_name].size} lat × {ds[lon_name].size} lon**")
-    st.write("NetCDF:", f"`{NC_PATH.as_posix()}`")
+    st.write("NetCDF source:", f"`{nc_path}`")
+
 
 
 # -----------------------------
