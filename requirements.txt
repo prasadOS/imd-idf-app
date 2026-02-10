@@ -1,0 +1,14 @@
+streamlit
+numpy
+pandas
+xarray
+netCDF4
+scipy
+matplotlib
+geopandas
+pyproj
+shapely
+rasterio
+openpyxl
+pydeck
+requests

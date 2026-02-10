@@ -1,0 +1,10 @@
+# Large data files
+data/rainfall/*.nc
+
+# Python junk
+__pycache__/
+*.pyc
+
+# OS junk
+.DS_Store
+Thumbs.db
