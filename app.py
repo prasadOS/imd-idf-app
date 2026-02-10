@@ -14,6 +14,18 @@ import matplotlib.pyplot as plt
 import geopandas as gpd
 from pyproj import Geod
 import pydeck as pdk
+import requests
+
+
+# -----------------------------
+# UI SETUP (MUST BE FIRST STREAMLIT CALL)
+# -----------------------------
+st.set_page_config(page_title="IMD IDF Analysis", layout="centered")
+
+
+# -----------------------------
+# OPTIONAL PASSWORD PROTECTION (SAFE)
+# -----------------------------
 PASSWORD = st.secrets.get("APP_PASSWORD")
 
 if PASSWORD:
@@ -28,13 +40,17 @@ if PASSWORD:
         else:
             st.stop()
 
+
 # -----------------------------
-# PATHS (RELATIVE)
+# PATHS + DATA (RELATIVE)
 # -----------------------------
 BASE_DIR = Path(__file__).resolve().parent
 DATA_DIR = BASE_DIR / "data"
 
+# We ONLY use the IMD NetCDF from GitHub Releases (data-v1)
+NC_URL = "https://github.com/prasadOS/imd-idf-app/releases/download/data-v1/rf_daily_1901_2023.nc"
 NC_PATH = DATA_DIR / "rainfall" / "rf_daily_1901_2023.nc"
+
 SHAPE_ROOT = DATA_DIR / "shapefiles"
 
 DEFAULT_RETURN_PERIODS = [2, 5, 10, 25, 50, 100]
@@ -43,9 +59,8 @@ DURATION_HR_BASE = 24.0
 
 
 # -----------------------------
-# UI SETUP
+# PAGE HEADER
 # -----------------------------
-st.set_page_config(page_title="IMD IDF Analysis", layout="centered")
 st.title("IMD IDF Analysis")
 st.caption("Site boundary → nearest IMD grid → extreme value fit → IDF tables/plots (with optional climate uplift)")
 
@@ -107,6 +122,25 @@ def read_vector_upload(uploaded_file) -> gpd.GeoDataFrame:
         return gpd.read_file(io.BytesIO(data))
 
     raise ValueError("Unsupported vector format. Use .zip (shp), .gpkg, or .geojson/.json")
+
+
+def ensure_nc_available():
+    """Download IMD NetCDF from GitHub Release (data-v1) if missing."""
+    (DATA_DIR / "rainfall").mkdir(parents=True, exist_ok=True)
+
+    if NC_PATH.exists() and NC_PATH.stat().st_size > 0:
+        return
+
+    r = requests.get(NC_URL, stream=True, timeout=180)
+    r.raise_for_status()
+
+    tmp_path = NC_PATH.with_suffix(".download")
+    with open(tmp_path, "wb") as f:
+        for chunk in r.iter_content(chunk_size=1024 * 1024):
+            if chunk:
+                f.write(chunk)
+
+    tmp_path.replace(NC_PATH)
 
 
 @st.cache_resource
@@ -284,10 +318,6 @@ def to_excel_bytes(sheets: Dict[str, pd.DataFrame]) -> bytes:
 
 
 def choose_map_style() -> str:
-    """
-    Mapbox styles look best but need MAPBOX_API_KEY.
-    If missing, fall back to a token-free CARTO basemap.
-    """
     if os.getenv("MAPBOX_API_KEY") or os.getenv("MAPBOX_ACCESS_TOKEN"):
         return "mapbox://styles/mapbox/dark-v11"
     return "https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json"
@@ -324,7 +354,7 @@ def make_pydeck_map(gdf, lat0, lon0, lat_g, lon_g, view_mode, show_grid=True):
 
     grid_layers = []
     if show_grid:
-        d = 0.125  # half-grid for 0.25°
+        d = 0.125
         grid_poly = {
             "type": "FeatureCollection",
             "features": [{
@@ -447,6 +477,26 @@ if gdf.empty:
     st.stop()
 
 st.success(f"Loaded boundary | Features: {len(gdf)} | CRS: {pretty_crs(gdf.crs)}")
+import requests
+
+def ensure_nc_available():
+    """
+    Downloads the IMD NetCDF from GitHub Releases if not already present.
+    Safe for Streamlit Cloud.
+    """
+    rainfall_dir = DATA_DIR / "rainfall"
+    rainfall_dir.mkdir(parents=True, exist_ok=True)
+
+    if NC_PATH.exists():
+        return
+
+    r = requests.get(NC_URL, stream=True, timeout=120)
+    r.raise_for_status()
+
+    with open(NC_PATH, "wb") as f:
+        for chunk in r.iter_content(chunk_size=1024 * 1024):
+            if chunk:
+                f.write(chunk)
 
 
 # -----------------------------
@@ -463,7 +513,6 @@ if not use_demo_rainfall:
     st.info("Enable this option to load the IMD rainfall dataset.")
     st.stop()
 
-# Only ONE source: GitHub Release
 with st.spinner("Downloading IMD rainfall dataset (data-v1)..."):
     try:
         ensure_nc_available()
@@ -475,10 +524,6 @@ with st.spinner("Downloading IMD rainfall dataset (data-v1)..."):
 
 st.success("IMD rainfall dataset loaded successfully.")
 
-
-# -----------------------------
-# OPEN NETCDF (SAFE)
-# -----------------------------
 try:
     ds = load_ds(nc_path)
 except Exception as e:
@@ -487,9 +532,12 @@ except Exception as e:
 
 
 
-# -----------------------------
-# DATASET METADATA
-# -----------------------------
+try:
+    ds = load_ds(nc_path)
+except Exception as e:
+    st.error(f"Could not open IMD NetCDF from {nc_source}: {e}")
+    st.stop()
+
 time_name, lat_name, lon_name, var_name = detect_dims_and_var(ds)
 
 tmin = str(pd.to_datetime(ds[time_name].values[0]).date())
@@ -501,8 +549,7 @@ with colA:
     st.write("Time range:", f"**{tmin} → {tmax}**")
 with colB:
     st.write("Grid:", f"**{ds[lat_name].size} lat × {ds[lon_name].size} lon**")
-    st.write("NetCDF source:", f"**{nc_source}**")
-
+    st.write("Source:", f"**{nc_source}**")
 
 
 # -----------------------------
