@@ -680,7 +680,40 @@ def ensure_nc_available():
                     f.write(chunk)
 
 
-ensure_nc_available()
+st.set_page_config(page_title="IMD IDF Analysis", layout="centered")
+st.title("IMD IDF Analysis")
+st.caption(
+    "Site boundary → nearest IMD grid → extreme value fit → "
+    "IDF tables/plots (with optional climate uplift)"
+)
+
+st.markdown("### Choose data source")
+
+use_demo = st.checkbox(
+    "Use demo IMD dataset (data-v1, ~350 MB download)",
+    value=False
+)
+
+uploaded_nc = st.file_uploader(
+    "Or upload your own IMD NetCDF (.nc)",
+    type=["nc"]
+)
+
+nc_path = None
+
+if uploaded_nc is not None:
+    with tempfile.NamedTemporaryFile(suffix=".nc", delete=False) as tmp:
+        tmp.write(uploaded_nc.read())
+        nc_path = Path(tmp.name)
+
+elif use_demo:
+    ensure_nc_available()
+    nc_path = NC_PATH
+
+else:
+    st.info("Select a data source to proceed.")
+    st.stop()
+
 
 
 NC_PATH = DATA_DIR / "rainfall" / "rf_daily_1901_2023.nc"
