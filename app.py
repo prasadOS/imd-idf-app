@@ -14,7 +14,18 @@ import matplotlib.pyplot as plt
 import geopandas as gpd
 from pyproj import Geod
 import pydeck as pdk
+PASSWORD = st.secrets["APP_PASSWORD"]
 
+if "auth" not in st.session_state:
+    st.session_state.auth = False
+
+if not st.session_state.auth:
+    pwd = st.text_input("Enter password", type="password")
+    if pwd == PASSWORD:
+        st.session_state.auth = True
+        st.rerun()
+    else:
+        st.stop()
 
 # -----------------------------
 # PATHS (RELATIVE)
@@ -626,7 +637,6 @@ else:
     st.info("Uplift is off. Enable it from the sidebar if needed.")
 
 st.caption("Note: This demo uses daily rainfall (24h). Shorter durations are derived via a transparent scaling rule with adjustable exponent n.")
-=======
 import os
 import io
 import zipfile
