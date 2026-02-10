@@ -455,41 +455,25 @@ st.success(f"Loaded boundary | Features: {len(gdf)} | CRS: {pretty_crs(gdf.crs)}
 st.subheader("2) Rainfall dataset")
 
 use_demo_rainfall = st.checkbox(
-    "Use demo IMD rainfall dataset (data-v1, ~350 MB download)",
+    "Use IMD rainfall dataset (from GitHub Releases, data-v1, ~350 MB)",
     value=False
 )
 
-uploaded_nc = st.file_uploader(
-    "Or upload your own IMD NetCDF (.nc)",
-    type=["nc"]
-)
+if not use_demo_rainfall:
+    st.info("Enable this option to load the IMD rainfall dataset.")
+    st.stop()
 
-nc_path = None
-nc_source = None
-
-
-# -------- CASE 1: Uploaded NetCDF --------
-if uploaded_nc is not None:
-    with tempfile.NamedTemporaryFile(suffix=".nc", delete=False) as tmp:
-        tmp.write(uploaded_nc.read())
-        nc_path = Path(tmp.name)
-    nc_source = "uploaded file"
-    st.success("Using uploaded NetCDF file.")
-
-
-# -------- CASE 2: Demo NetCDF from GitHub Release --------
-elif use_demo_rainfall:
-    with st.spinner("Downloading demo IMD rainfall dataset (data-v1)..."):
+# Only ONE source: GitHub Release
+with st.spinner("Downloading IMD rainfall dataset (data-v1)..."):
+    try:
         ensure_nc_available()
         nc_path = NC_PATH
-    nc_source = "GitHub Release (data-v1)"
-    st.success("Demo IMD rainfall dataset loaded.")
+        nc_source = "GitHub Release (data-v1)"
+    except Exception as e:
+        st.error(f"Failed to download IMD rainfall dataset: {e}")
+        st.stop()
 
-
-# -------- CASE 3: Nothing selected --------
-else:
-    st.info("Please upload a NetCDF file or select the demo dataset to proceed.")
-    st.stop()
+st.success("IMD rainfall dataset loaded successfully.")
 
 
 # -----------------------------
@@ -498,8 +482,9 @@ else:
 try:
     ds = load_ds(nc_path)
 except Exception as e:
-    st.error(f"Could not open NetCDF from {nc_source}: {e}")
+    st.error(f"Could not open IMD NetCDF from {nc_source}: {e}")
     st.stop()
+
 
 
 # -----------------------------
